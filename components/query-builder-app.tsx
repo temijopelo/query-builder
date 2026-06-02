@@ -278,7 +278,9 @@ export default function QueryBuilderApp() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [loadedId, setLoadedId] = useState<string | null>(null);
   const executeTimer = useRef<number | null>(null);
+  const loadTimer = useRef<number | null>(null);
 
   const source = useMemo(() => getDataSource(query.sourceId), [query.sourceId]);
   const validationIssues = useMemo(
@@ -373,47 +375,55 @@ export default function QueryBuilderApp() {
 
   useEffect(() => {
     return () => {
-      if (executeTimer.current) {
-        window.clearTimeout(executeTimer.current);
-      }
+      if (executeTimer.current) window.clearTimeout(executeTimer.current);
+      if (loadTimer.current) window.clearTimeout(loadTimer.current);
     };
   }, []);
 
+  // Ref holds the latest version of each callback so the persistent keydown
+  // listener never closes over stale values.
+  const cbRef = useRef({
+    handleExecute,
+    copyExportJson,
+    handleSavePreset,
+    handleImportJson,
+    toggleTheme: () => setTheme(theme === "dark" ? "light" : "dark"),
+  });
+  cbRef.current.handleExecute = handleExecute;
+  cbRef.current.copyExportJson = copyExportJson;
+  cbRef.current.handleSavePreset = handleSavePreset;
+  cbRef.current.handleImportJson = handleImportJson;
+  cbRef.current.toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) {
-        return;
-      }
-
-      if (event.key.toLowerCase() === "enter") {
-        event.preventDefault();
-        handleExecute();
-      }
-
-      if (event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        copyExportJson();
-      }
-
-      if (event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        handleSavePreset();
-      }
-
-      if (event.key.toLowerCase() === "i") {
-        event.preventDefault();
-        handleImportJson();
-      }
-
-      if (event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        setTheme(theme === "dark" ? "light" : "dark");
+      if (!(event.metaKey || event.ctrlKey)) return;
+      switch (event.key.toLowerCase()) {
+        case "enter":
+          event.preventDefault();
+          cbRef.current.handleExecute();
+          break;
+        case "e":
+          event.preventDefault();
+          cbRef.current.copyExportJson();
+          break;
+        case "s":
+          event.preventDefault();
+          cbRef.current.handleSavePreset();
+          break;
+        case "i":
+          event.preventDefault();
+          cbRef.current.handleImportJson();
+          break;
+        case "d":
+          event.preventDefault();
+          cbRef.current.toggleTheme();
+          break;
       }
     };
-
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [theme, setTheme]);
+  }, []);
 
   function persistHistoryItem(count: number) {
     const snapshot = JSON.parse(serializeQueryState(query)) as QueryState;
@@ -511,8 +521,13 @@ export default function QueryBuilderApp() {
     });
   }
 
-  function restoreSnapshot(snapshot: QueryState) {
+  function restoreSnapshot(snapshot: QueryState, id?: string) {
     dispatch({ type: "replace", query: normalizeQueryState(snapshot) });
+    if (id) {
+      if (loadTimer.current) window.clearTimeout(loadTimer.current);
+      setLoadedId(id);
+      loadTimer.current = window.setTimeout(() => setLoadedId(null), 1200);
+    }
   }
 
   return (
@@ -579,6 +594,23 @@ export default function QueryBuilderApp() {
                 )}
               </div>
             </ControlBar>
+
+            <PanelShell
+              title="Query preview"
+              subtitle="Updates in real time as you tweak any rule or nested group."
+            >
+              <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-400">
+                <span className="rounded-full bg-white/5 px-3 py-1">
+                  {previewMode}
+                </span>
+                <span className="rounded-full bg-white/5 px-3 py-1">
+                  {execution.valid ? "valid" : "blocked"}
+                </span>
+              </div>
+              <pre className="max-h-130 overflow-auto rounded-md bg-slate-950/80 p-4 text-[0.8rem] leading-6 text-slate-100">
+                {previewText}
+              </pre>
+            </PanelShell>
           </div>
         </nav>
 
@@ -708,25 +740,8 @@ export default function QueryBuilderApp() {
 
               <div className="grid gap-5 lg:grid-cols-2">
                 <PanelShell
-                  title="Query preview"
-                  subtitle="Updates in real time as you tweak any rule or nested group."
-                >
-                  <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-                    <span className="rounded-full bg-white/5 px-3 py-1">
-                      {previewMode}
-                    </span>
-                    <span className="rounded-full bg-white/5 px-3 py-1">
-                      {execution.valid ? "valid" : "blocked"}
-                    </span>
-                  </div>
-                  <pre className="max-h-130 overflow-auto rounded-3xl bg-slate-950/80 p-4 text-[0.8rem] leading-6 text-slate-100">
-                    {previewText}
-                  </pre>
-                </PanelShell>
-
-                <PanelShell
                   title="Execution simulator"
-                  subtitle="A filtered slice of the mock dataset with sorting and pagination controls."
+                  subtitle="Results update live as you change rules. Use 'Run simulation' to record a snapshot to history."
                 >
                   <div className="mb-4 flex flex-wrap gap-3">
                     <select
@@ -830,41 +845,44 @@ export default function QueryBuilderApp() {
                     </button>
                   </div>
                 </PanelShell>
-              </div>
-
-              <PanelShell
-                title="Saved presets"
-                subtitle="Each preset stores the entire nested tree for one-click reuse."
-              >
-                <div className="space-y-3">
-                  {presets.length === 0 ? (
-                    <div className="rounded-3xl bg-white/5 px-4 py-8 text-sm text-slate-400">
-                      Save a preset to reuse a nested filter definition later.
-                    </div>
-                  ) : (
-                    presets.map((preset) => (
-                      <button
-                        key={preset.id}
-                        className="w-full rounded-3xl bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
-                        onClick={() => restoreSnapshot(preset.snapshot)}
-                        type="button"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-medium text-white">
-                            {preset.name}
+                <PanelShell
+                  title="Saved presets"
+                  subtitle="Each preset stores the entire nested tree for one-click reuse."
+                >
+                  <div className="space-y-3">
+                    {presets.length === 0 ? (
+                      <div className="rounded-3xl bg-white/5 px-4 py-8 text-sm text-slate-400">
+                        Save a preset to reuse a nested filter definition later.
+                      </div>
+                    ) : (
+                      presets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          className={`w-full rounded-3xl px-4 py-4 text-left transition ${
+                            loadedId === preset.id
+                              ? "bg-cyan-400/20 ring-1 ring-cyan-400/30"
+                              : "bg-white/5 hover:bg-white/10"
+                          }`}
+                          onClick={() => restoreSnapshot(preset.snapshot, preset.id)}
+                          type="button"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-medium text-white">
+                              {preset.name}
+                            </p>
+                            <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                              {loadedId === preset.id ? "loaded ✓" : "preset"}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+                            {prettyTimestamp(preset.createdAt)}
                           </p>
-                          <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                            preset
-                          </span>
-                        </div>
-                        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-                          {prettyTimestamp(preset.createdAt)}
-                        </p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </PanelShell>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </PanelShell>
+              </div>
             </div>
           </div>
         </div>
@@ -929,8 +947,12 @@ export default function QueryBuilderApp() {
                   history.map((entry) => (
                     <button
                       key={entry.id}
-                      className="w-full rounded-3xl bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
-                      onClick={() => restoreSnapshot(entry.snapshot)}
+                      className={`w-full rounded-3xl px-4 py-4 text-left transition ${
+                        loadedId === entry.id
+                          ? "bg-cyan-400/20 ring-1 ring-cyan-400/30"
+                          : "bg-white/5 hover:bg-white/10"
+                      }`}
+                      onClick={() => restoreSnapshot(entry.snapshot, entry.id)}
                       type="button"
                     >
                       <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.2em] text-slate-400">

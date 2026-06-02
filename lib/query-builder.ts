@@ -498,13 +498,18 @@ export function createRuleNode(
 ): RuleNode {
   const field = getFieldDefinition(source, fieldKey);
   const operator = getDefaultOperator(source, fieldKey);
+  // For enum fields, seed with the first valid option instead of the generic fallback
+  const value =
+    field.type === "enum" && field.options?.length
+      ? field.options[0]
+      : getDefaultRuleValue(field.type, operator);
 
   return {
     kind: "rule",
     id: createId(),
     fieldKey: field.key,
     operator,
-    value: getDefaultRuleValue(field.type, operator),
+    value,
   };
 }
 
@@ -523,31 +528,18 @@ export function createGroupNode(
 }
 
 function createStarterTree(source: DataSourceDefinition): GroupNode {
-  const primary = createRuleNode(source, getDefaultFieldKey(source));
-  const secondary = createRuleNode(
-    source,
-    Object.keys(source.fields)[1] ?? getDefaultFieldKey(source),
-  );
-  const nested = createGroupNode(source, "and", [
-    createRuleNode(source),
-    createRuleNode(source),
-  ]);
+  // Prefer an enum field so the default value is guaranteed to be a valid option
+  // that actually matches rows in the mock dataset.
+  const enumFieldKey = Object.values(source.fields).find(
+    (f) => f.type === "enum",
+  )?.key;
 
   return {
     kind: "group",
     id: createId(),
-    logic: "or",
+    logic: "and",
     collapsed: false,
-    children: [
-      {
-        kind: "group",
-        id: createId(),
-        logic: "and",
-        collapsed: false,
-        children: [primary, secondary],
-      },
-      nested,
-    ],
+    children: [createRuleNode(source, enumFieldKey ?? getDefaultFieldKey(source))],
   };
 }
 
