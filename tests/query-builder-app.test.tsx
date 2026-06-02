@@ -22,7 +22,7 @@ describe("query builder app", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /mongo/i }));
-    expect(screen.getByText(/"\$or"/i)).toBeInTheDocument();
+    expect(screen.getByText(/"\$and"/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /run simulation/i }));
 
