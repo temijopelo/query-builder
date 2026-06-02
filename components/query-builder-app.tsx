@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { memo, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BsKeyboard, BsMoon, BsSun } from "react-icons/bs";
 import {
   addNodeToGroup,
   createGroupNode,
@@ -52,6 +53,9 @@ import {
   updateRuleNode,
   validateQuery,
 } from "../lib/query-builder";
+import StatCard from "./statCard";
+import PanelShell from "./panelShell";
+import ControlBar from "./controlBar";
 
 type QueryAction =
   | { type: "setSource"; sourceId: string }
@@ -224,6 +228,13 @@ function useThemeMode(): [ThemeMode, (next: ThemeMode) => void] {
   }, [theme]);
 
   return [theme, setTheme];
+}
+
+function countRules(group: QueryState["root"]): number {
+  return group.children.reduce((sum, child) => {
+    if (child.kind === "group") return sum + countRules(child);
+    return sum + 1;
+  }, 0);
 }
 
 function buildLocationIndex(
@@ -402,7 +413,7 @@ export default function QueryBuilderApp() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [theme, setTheme]);
 
   function persistHistoryItem(count: number) {
     const snapshot = JSON.parse(serializeQueryState(query)) as QueryState;
@@ -511,125 +522,128 @@ export default function QueryBuilderApp() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(65,184,255,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(255,112,67,0.16),transparent_34%),linear-gradient(180deg,#09111f_0%,#0b1220_45%,#060b16_100%)] text-slate-50">
-        <div className="mx-auto flex min-h-screen w-full max-w-425 flex-col gap-6 px-4 py-5 md:px-6 xl:px-8">
-          <header className="overflow-hidden rounded-4xl border border-white/10 bg-white/5 px-5 py-5 shadow-2xl shadow-slate-950/25 backdrop-blur-xl md:px-7">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div className="max-w-3xl space-y-3">
-                <div className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200">
-                  Visual Query Builder
+      <div className="flex flex-col gap-4 p-3 lg:flex-row lg:items-start lg:gap-3 lg:p-2">
+        {/* Left fixed sidebar — Configuration */}
+        <nav className="qb-app w-full bg-background lg:flex-1 lg:sticky lg:top-0 lg:z-30 lg:h-screen lg:overflow-y-auto">
+          <div className="space-y-4">
+            <button
+              className="flex items-center justify-center rounded-md bg-white/5 px-4 py-3 text-xl text-white transition hover:bg-white/10"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              type="button"
+              aria-label={
+                theme === "dark"
+                  ? "Switch to light mode"
+                  : "Switch to dark mode"
+              }
+            >
+              {theme === "dark" ? <BsSun /> : <BsMoon />}
+            </button>
+            <ControlBar
+              label="Data source"
+              helper="Schema-driven controls and preview outputs update instantly."
+            >
+              <select
+                className="w-full rounded-md bg-slate-950/70 px-6 py-3 text-sm text-white outline-none transition"
+                value={query.sourceId}
+                onChange={(event) =>
+                  dispatch({
+                    type: "setSource",
+                    sourceId: event.target.value,
+                  })
+                }
+              >
+                {DATA_SOURCES.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.label}
+                  </option>
+                ))}
+              </select>
+            </ControlBar>
+
+            <ControlBar
+              label="Query mode"
+              helper="Preview the same tree as SQL-like text, Mongo object, or GraphQL filter JSON."
+            >
+              <div className="grid grid-cols-3 gap-2">
+                {(["sql", "mongo", "graphql"] as PreviewMode[]).map(
+                  (candidate) => (
+                    <button
+                      key={candidate}
+                      className={`rounded-md px-3 py-3 text-xs font-semibold uppercase tracking-[0.22em] transition ${previewMode === candidate ? "bg-cyan-400/20 text-cyan-100" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}
+                      onClick={() => setPreviewMode(candidate)}
+                      type="button"
+                    >
+                      {candidate}
+                    </button>
+                  ),
+                )}
+              </div>
+            </ControlBar>
+          </div>
+        </nav>
+
+        {/* Main content */}
+        <div className="qb-app w-full min-h-screen bg-background text-slate-50 lg:flex-3">
+          <div className="mx-auto flex min-h-screen w-full flex-col gap-6 ">
+            <header className="overflow-hidden rounded-md bg-white/5 px-5 py-5 md:px-7">
+              <div className="flex flex-col gap-5 ">
+                <div className="max-w-3xl space-y-3">
+                  <div className="inline-flex items-center rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200">
+                    Visual Query Builder
+                  </div>
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
+                      Compose nested filters, preview the query, and run the
+                      dataset without writing raw syntax.
+                    </h1>
+                    <p className="max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
+                      Switch schemas, build recursive condition trees, reorder
+                      groups, validate operators, and inspect live SQL, Mongo,
+                      and GraphQL-style previews in one workspace.
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-3">
-                  <h1 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
-                    Compose nested filters, preview the query, and run the
-                    dataset without writing raw syntax.
-                  </h1>
-                  <p className="max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
-                    Switch schemas, build recursive condition trees, reorder
-                    groups, validate operators, and inspect live SQL, Mongo, and
-                    GraphQL-style previews in one workspace.
-                  </p>
+
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <StatCard
+                    label="Visible rules"
+                    value={String(countRules(query.root))}
+                    accent="text-cyan-300"
+                  />
+                  <StatCard
+                    label="Matching rows"
+                    value={String(execution.count)}
+                    accent="text-emerald-300"
+                  />
+                  <StatCard
+                    label="Saved presets"
+                    value={String(presets.length)}
+                    accent="text-amber-300"
+                  />
+                  <StatCard
+                    label="History items"
+                    value={String(history.length)}
+                    accent="text-violet-300"
+                  />
                 </div>
               </div>
+            </header>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:min-w-85 xl:grid-cols-2">
-                <StatCard
-                  label="Visible rules"
-                  value={String(validationIssues.length)}
-                  accent="text-cyan-300"
-                />
-                <StatCard
-                  label="Matching rows"
-                  value={String(execution.count)}
-                  accent="text-emerald-300"
-                />
-                <StatCard
-                  label="Saved presets"
-                  value={String(presets.length)}
-                  accent="text-amber-300"
-                />
-                <StatCard
-                  label="History items"
-                  value={String(history.length)}
-                  accent="text-violet-300"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
-              <ControlBar
-                label="Data source"
-                helper="Schema-driven controls and preview outputs update instantly."
-              >
-                <select
-                  className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/60"
-                  value={query.sourceId}
-                  onChange={(event) =>
-                    dispatch({
-                      type: "setSource",
-                      sourceId: event.target.value,
-                    })
-                  }
-                >
-                  {DATA_SOURCES.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.label}
-                    </option>
-                  ))}
-                </select>
-              </ControlBar>
-
-              <ControlBar
-                label="Query mode"
-                helper="Preview the same tree as SQL-like text, Mongo object, or GraphQL filter JSON."
-              >
-                <div className="grid grid-cols-3 gap-2">
-                  {(["sql", "mongo", "graphql"] as PreviewMode[]).map(
-                    (candidate) => (
-                      <button
-                        key={candidate}
-                        className={`rounded-2xl border px-3 py-3 text-xs font-semibold uppercase tracking-[0.22em] transition ${previewMode === candidate ? "border-cyan-300/60 bg-cyan-400/20 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10"}`}
-                        onClick={() => setPreviewMode(candidate)}
-                        type="button"
-                      >
-                        {candidate}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </ControlBar>
-
-              <ControlBar
-                label="Theme"
-                helper="Keyboard shortcut: Cmd/Ctrl + D."
-              >
-                <button
-                  className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/10"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  type="button"
-                >
-                  {theme === "dark" ? "Switch to light" : "Switch to dark"}
-                </button>
-              </ControlBar>
-            </div>
-          </header>
-
-          <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
-            <section className="space-y-5">
+            <div className="flex-1 space-y-6">
               <PanelShell
                 title="Recursive Builder"
                 subtitle="Drag nodes to reorder within each group, add nested groups as deep as needed, and use the collapse control to manage tall trees."
                 actions={
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100 transition hover:bg-cyan-400/20"
+                      className="rounded-full bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100 transition hover:bg-cyan-400/20"
                       onClick={handleExecute}
                       type="button"
                     >
                       {isExecuting ? "Running..." : "Run simulation"}
                     </button>
                     <button
-                      className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-100 transition hover:bg-white/10"
+                      className="rounded-full bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-100 transition hover:bg-white/10"
                       onClick={() =>
                         dispatch({ type: "reset", sourceId: query.sourceId })
                       }
@@ -638,7 +652,7 @@ export default function QueryBuilderApp() {
                       Reset tree
                     </button>
                     <button
-                      className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100 transition hover:bg-emerald-400/20"
+                      className="rounded-full bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100 transition hover:bg-emerald-400/20"
                       onClick={copyExportJson}
                       type="button"
                     >
@@ -648,7 +662,7 @@ export default function QueryBuilderApp() {
                 }
               >
                 <div className="space-y-4">
-                  <div className="rounded-3xl border border-white/10 bg-slate-950/50 p-4">
+                  <div className="rounded-3xl bg-slate-950/50 p-4">
                     <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.24em] text-slate-400">
                       <span>{source.description}</span>
                       <span>•</span>
@@ -659,7 +673,7 @@ export default function QueryBuilderApp() {
                         {validationIssues.length === 1 ? "" : "s"}
                       </span>
                     </div>
-                    <div className="mt-4 rounded-3xl border border-white/10 bg-white/3 p-4 shadow-inner shadow-black/20">
+                    <div className="mt-4 rounded-3xl bg-white/3 p-4">
                       <QueryGroupCard
                         dispatch={dispatch}
                         group={query.root}
@@ -676,14 +690,14 @@ export default function QueryBuilderApp() {
                       {validationIssues.map((issue) => (
                         <div
                           key={`${issue.nodeId}-${issue.message}`}
-                          className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
+                          className="rounded-md bg-rose-400/10 px-4 py-3 text-sm text-rose-100"
                         >
                           {issue.message}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                    <div className="rounded-md bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
                       Query validation passed. The builder will block malformed
                       group structures and incompatible operator/value
                       combinations.
@@ -698,14 +712,14 @@ export default function QueryBuilderApp() {
                   subtitle="Updates in real time as you tweak any rule or nested group."
                 >
                   <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    <span className="rounded-full bg-white/5 px-3 py-1">
                       {previewMode}
                     </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                    <span className="rounded-full bg-white/5 px-3 py-1">
                       {execution.valid ? "valid" : "blocked"}
                     </span>
                   </div>
-                  <pre className="max-h-130 overflow-auto rounded-3xl border border-white/10 bg-slate-950/80 p-4 text-[0.8rem] leading-6 text-slate-100">
+                  <pre className="max-h-130 overflow-auto rounded-3xl bg-slate-950/80 p-4 text-[0.8rem] leading-6 text-slate-100">
                     {previewText}
                   </pre>
                 </PanelShell>
@@ -716,7 +730,7 @@ export default function QueryBuilderApp() {
                 >
                   <div className="mb-4 flex flex-wrap gap-3">
                     <select
-                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                      className="rounded-md bg-slate-950/70 px-3 py-2 text-sm text-white"
                       value={effectiveSortField}
                       onChange={(event) => setSortField(event.target.value)}
                     >
@@ -727,7 +741,7 @@ export default function QueryBuilderApp() {
                       ))}
                     </select>
                     <button
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white"
+                      className="rounded-md bg-white/5 px-4 py-2 text-sm text-white"
                       onClick={() =>
                         setSortDirection((current) =>
                           current === "asc" ? "desc" : "asc",
@@ -738,7 +752,7 @@ export default function QueryBuilderApp() {
                       {sortDirection === "asc" ? "Ascending" : "Descending"}
                     </button>
                     <select
-                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white"
+                      className="rounded-md bg-slate-950/70 px-3 py-2 text-sm text-white"
                       value={pageSize}
                       onChange={(event) =>
                         setPageSize(Number(event.target.value))
@@ -754,7 +768,7 @@ export default function QueryBuilderApp() {
 
                   <div className="space-y-3">
                     {visibleRows.length === 0 ? (
-                      <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-8 text-sm text-slate-300">
+                      <div className="rounded-3xl bg-white/5 px-4 py-8 text-sm text-slate-300">
                         No rows matched this query. Broaden the filter or remove
                         the current nested condition group.
                       </div>
@@ -762,7 +776,7 @@ export default function QueryBuilderApp() {
                       visibleRows.map((row, index) => (
                         <div
                           key={`${index}-${JSON.stringify(row)}`}
-                          className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4"
+                          className="rounded-3xl bg-white/5 px-4 py-4"
                         >
                           <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.22em] text-slate-400">
                             <span>
@@ -774,7 +788,7 @@ export default function QueryBuilderApp() {
                             {Object.entries(row).map(([key, value]) => (
                               <div
                                 key={key}
-                                className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3"
+                                className="rounded-md bg-slate-950/70 px-3 py-3"
                               >
                                 <dt className="text-xs uppercase tracking-[0.2em] text-slate-400">
                                   {key}
@@ -792,7 +806,7 @@ export default function QueryBuilderApp() {
 
                   <div className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-300">
                     <button
-                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 disabled:opacity-40"
+                      className="rounded-md bg-white/5 px-3 py-2 disabled:opacity-40"
                       disabled={effectivePage === 1}
                       onClick={() =>
                         setPage((current) => Math.max(1, current - 1))
@@ -805,7 +819,7 @@ export default function QueryBuilderApp() {
                       Page {effectivePage} of {totalPages}
                     </span>
                     <button
-                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 disabled:opacity-40"
+                      className="rounded-md bg-white/5 px-3 py-2 disabled:opacity-40"
                       disabled={effectivePage === totalPages}
                       onClick={() =>
                         setPage((current) => Math.min(totalPages, current + 1))
@@ -817,98 +831,6 @@ export default function QueryBuilderApp() {
                   </div>
                 </PanelShell>
               </div>
-            </section>
-
-            <aside className="space-y-5">
-              <PanelShell
-                title="Controls and shortcuts"
-                subtitle="Use the buttons below or keyboard shortcuts to keep the workflow fast."
-              >
-                <div className="grid gap-3 text-sm text-slate-300">
-                  <ShortcutRow
-                    shortcut="Cmd/Ctrl + Enter"
-                    label="Run simulation"
-                  />
-                  <ShortcutRow shortcut="Cmd/Ctrl + S" label="Save preset" />
-                  <ShortcutRow
-                    shortcut="Cmd/Ctrl + E"
-                    label="Copy export JSON"
-                  />
-                  <ShortcutRow
-                    shortcut="Cmd/Ctrl + I"
-                    label="Import JSON from the textarea"
-                  />
-                  <ShortcutRow shortcut="Cmd/Ctrl + D" label="Toggle theme" />
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  <label className="grid gap-2 text-sm text-slate-300">
-                    Preset name
-                    <input
-                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
-                      value={presetName}
-                      onChange={(event) => setPresetName(event.target.value)}
-                      placeholder="High-value users"
-                    />
-                  </label>
-                  <button
-                    className="w-full rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
-                    onClick={handleSavePreset}
-                    type="button"
-                  >
-                    Save current query preset
-                  </button>
-                </div>
-
-                <div className="mt-6 space-y-3">
-                  <label className="grid gap-2 text-sm text-slate-300">
-                    Import query JSON
-                    <textarea
-                      className="min-h-40 rounded-3xl border border-white/10 bg-slate-950/70 px-4 py-3 font-mono text-xs text-slate-100 outline-none focus:border-cyan-300/60"
-                      value={importText}
-                      onChange={(event) => setImportText(event.target.value)}
-                      placeholder={serializeQueryState(query)}
-                    />
-                  </label>
-                  <button
-                    className="w-full rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
-                    onClick={handleImportJson}
-                    type="button"
-                  >
-                    Import JSON
-                  </button>
-                </div>
-              </PanelShell>
-
-              <PanelShell
-                title="Query history"
-                subtitle="Recent executions are cached locally and can be restored instantly."
-              >
-                <div className="space-y-3">
-                  {history.length === 0 ? (
-                    <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-8 text-sm text-slate-400">
-                      Run the simulator to start capturing execution history.
-                    </div>
-                  ) : (
-                    history.map((entry) => (
-                      <button
-                        key={entry.id}
-                        className="w-full rounded-3xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:border-white/20 hover:bg-white/10"
-                        onClick={() => restoreSnapshot(entry.snapshot)}
-                        type="button"
-                      >
-                        <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.2em] text-slate-400">
-                          <span>{prettyTimestamp(entry.timestamp)}</span>
-                          <span>
-                            {entry.count} row{entry.count === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-white">{entry.label}</p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </PanelShell>
 
               <PanelShell
                 title="Saved presets"
@@ -916,14 +838,14 @@ export default function QueryBuilderApp() {
               >
                 <div className="space-y-3">
                   {presets.length === 0 ? (
-                    <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-8 text-sm text-slate-400">
+                    <div className="rounded-3xl bg-white/5 px-4 py-8 text-sm text-slate-400">
                       Save a preset to reuse a nested filter definition later.
                     </div>
                   ) : (
                     presets.map((preset) => (
                       <button
                         key={preset.id}
-                        className="w-full rounded-3xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:border-white/20 hover:bg-white/10"
+                        className="w-full rounded-3xl bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
                         onClick={() => restoreSnapshot(preset.snapshot)}
                         type="button"
                       >
@@ -943,86 +865,140 @@ export default function QueryBuilderApp() {
                   )}
                 </div>
               </PanelShell>
-            </aside>
+            </div>
           </div>
         </div>
+
+        {/* Right fixed sidebar — Controls & History */}
+        <aside className="qb-app w-full bg-background lg:flex-1 lg:sticky lg:top-0 lg:z-30 lg:h-screen lg:overflow-y-auto">
+          <div className="space-y-5">
+            <PanelShell
+              title="Controls"
+              subtitle="Save presets for one-click reuse or import a query from JSON."
+              actions={<ShortcutsTooltip />}
+            >
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Preset name
+                  <input
+                    className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
+                    value={presetName}
+                    onChange={(event) => setPresetName(event.target.value)}
+                    placeholder="High-value users"
+                  />
+                </label>
+                <button
+                  className="w-full rounded-md bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
+                  onClick={handleSavePreset}
+                  type="button"
+                >
+                  Save current query preset
+                </button>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Import query JSON
+                  <textarea
+                    className="min-h-40 rounded-3xl bg-slate-950/70 px-4 py-3 font-mono text-xs text-slate-100 outline-none"
+                    value={importText}
+                    onChange={(event) => setImportText(event.target.value)}
+                    placeholder={serializeQueryState(query)}
+                  />
+                </label>
+                <button
+                  className="w-full rounded-md bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+                  onClick={handleImportJson}
+                  type="button"
+                >
+                  Import JSON
+                </button>
+              </div>
+            </PanelShell>
+
+            <PanelShell
+              title="Query history"
+              subtitle="Recent executions are cached locally and can be restored instantly."
+            >
+              <div className="space-y-3">
+                {history.length === 0 ? (
+                  <div className="rounded-3xl bg-white/5 px-4 py-8 text-sm text-slate-400">
+                    Run the simulator to start capturing execution history.
+                  </div>
+                ) : (
+                  history.map((entry) => (
+                    <button
+                      key={entry.id}
+                      className="w-full rounded-3xl bg-white/5 px-4 py-4 text-left transition hover:bg-white/10"
+                      onClick={() => restoreSnapshot(entry.snapshot)}
+                      type="button"
+                    >
+                      <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.2em] text-slate-400">
+                        <span>{prettyTimestamp(entry.timestamp)}</span>
+                        <span>
+                          {entry.count} row{entry.count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-white">{entry.label}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PanelShell>
+          </div>
+        </aside>
       </div>
     </DndContext>
   );
 }
 
-interface PanelShellProps {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-  actions?: React.ReactNode;
-}
+function ShortcutsTooltip() {
+  const [open, setOpen] = useState(false);
 
-function PanelShell({ title, subtitle, children, actions }: PanelShellProps) {
+  const shortcuts = [
+    { shortcut: "⌘ / Ctrl + Enter", label: "Run simulation" },
+    { shortcut: "⌘ / Ctrl + S", label: "Save preset" },
+    { shortcut: "⌘ / Ctrl + E", label: "Copy export JSON" },
+    { shortcut: "⌘ / Ctrl + I", label: "Import JSON" },
+    { shortcut: "⌘ / Ctrl + D", label: "Toggle theme" },
+  ];
+
   return (
-    <section className="overflow-hidden rounded-4xl border border-white/10 bg-white/5 shadow-2xl shadow-slate-950/25 backdrop-blur-xl">
-      <div className="border-b border-white/10 px-5 py-5 md:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-7 text-slate-400">
-              {subtitle}
-            </p>
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        className="flex items-center justify-center rounded-md bg-white/5 p-2 text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
+        type="button"
+        aria-label="Keyboard shortcuts"
+      >
+        <BsKeyboard className="h-4 w-4" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-2 min-w-68 rounded-md border border-white/10 bg-slate-900 p-3 shadow-2xl">
+          <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-400">
+            Keyboard shortcuts
+          </p>
+          <div className="space-y-2">
+            {shortcuts.map(({ shortcut, label }) => (
+              <div
+                key={shortcut}
+                className="flex items-center justify-between gap-4 rounded-md bg-slate-950/60 px-3 py-2"
+              >
+                <span className="font-mono text-xs text-cyan-200">
+                  {shortcut}
+                </span>
+                <span className="text-right text-xs text-slate-300">
+                  {label}
+                </span>
+              </div>
+            ))}
           </div>
-          {actions}
         </div>
-      </div>
-      <div className="px-5 py-5 md:px-6">{children}</div>
-    </section>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 backdrop-blur">
-      <div className={`text-2xl font-semibold ${accent}`}>{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function ControlBar({
-  label,
-  helper,
-  children,
-}: {
-  label: string;
-  helper: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-      <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
-        {label}
-      </div>
-      <p className="mt-1 text-sm leading-6 text-slate-300">{helper}</p>
-      <div className="mt-4">{children}</div>
-    </div>
-  );
-}
-
-function ShortcutRow({ shortcut, label }: { shortcut: string; label: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-      <span className="font-mono text-xs uppercase tracking-[0.18em] text-cyan-200">
-        {shortcut}
-      </span>
-      <span className="text-right text-sm text-slate-300">{label}</span>
+      )}
     </div>
   );
 }
@@ -1046,12 +1022,12 @@ const QueryGroupCard = memo(function QueryGroupCard({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-white/10 bg-slate-950/70 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-3xl bg-slate-950/70 px-4 py-4">
         <span className="text-xs uppercase tracking-[0.24em] text-slate-400">
           Group
         </span>
         <select
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+          className="rounded-xl bg-white/5 px-3 py-2 text-sm text-white outline-none"
           value={group.logic}
           onChange={(event) =>
             dispatch({
@@ -1065,21 +1041,21 @@ const QueryGroupCard = memo(function QueryGroupCard({
           <option value="or">OR</option>
         </select>
         <button
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100"
+          className="rounded-xl bg-white/5 px-3 py-2 text-sm text-slate-100"
           onClick={() => dispatch({ type: "toggleGroup", path: groupPath })}
           type="button"
         >
           {group.collapsed ? "Expand" : "Collapse"}
         </button>
         <button
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100"
+          className="rounded-xl bg-white/5 px-3 py-2 text-sm text-slate-100"
           onClick={() => dispatch({ type: "addRule", path: groupPath })}
           type="button"
         >
           + Rule
         </button>
         <button
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100"
+          className="rounded-xl bg-white/5 px-3 py-2 text-sm text-slate-100"
           onClick={() => dispatch({ type: "addGroup", path: groupPath })}
           type="button"
         >
@@ -1150,11 +1126,11 @@ function QueryNodeCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-3xl border ${activeDragId === child.id ? "border-cyan-300/60 bg-cyan-400/10" : "border-white/10 bg-slate-950/60"} px-4 py-4 shadow-xl shadow-slate-950/20`}
+      className={`rounded-3xl ${activeDragId === child.id ? "bg-cyan-400/10" : "bg-slate-950/60"} px-4 py-4`}
     >
       <div className="flex items-start gap-4">
         <button
-          className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300"
+          className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/5 text-slate-300"
           {...attributes}
           {...listeners}
           ref={setActivatorNodeRef}
@@ -1172,7 +1148,7 @@ function QueryNodeCard({
                   Nested group
                 </span>
                 <button
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
+                  className="rounded-full bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
                   onClick={() =>
                     dispatch({ type: "toggleGroup", path: childPath })
                   }
@@ -1181,7 +1157,7 @@ function QueryNodeCard({
                   {child.collapsed ? "Expand" : "Collapse"}
                 </button>
                 <button
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
+                  className="rounded-full bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
                   onClick={() =>
                     dispatch({ type: "removeNode", path: childPath })
                   }
@@ -1253,7 +1229,7 @@ const RuleEditor = memo(function RuleEditor({
           Rule
         </span>
         <button
-          className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
+          className="rounded-full bg-white/5 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-slate-200"
           onClick={() => dispatch({ type: "removeNode", path: childPath })}
           type="button"
         >
@@ -1261,11 +1237,11 @@ const RuleEditor = memo(function RuleEditor({
         </button>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1.1fr]">
+      <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.1fr]">
         <label className="grid gap-2 text-sm text-slate-300">
           Field
           <select
-            className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+            className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
             value={child.fieldKey}
             onChange={(event) => {
               const nextFieldKey = event.target.value;
@@ -1294,7 +1270,7 @@ const RuleEditor = memo(function RuleEditor({
         <label className="grid gap-2 text-sm text-slate-300">
           Operator
           <select
-            className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+            className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
             value={child.operator}
             onChange={(event) => {
               const nextOperator = event.target.value as RuleNode["operator"];
@@ -1322,7 +1298,7 @@ const RuleEditor = memo(function RuleEditor({
           {needsValue ? (
             valueControl
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-slate-400">
+            <div className="rounded-md bg-slate-950/50 px-4 py-3 text-slate-400">
               This operator does not require a value.
             </div>
           )}
@@ -1330,7 +1306,7 @@ const RuleEditor = memo(function RuleEditor({
       </div>
 
       {issueMessages.length > 0 && (
-        <div className="space-y-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+        <div className="space-y-2 rounded-md bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
           {issueMessages.map((message) => (
             <div key={message}>{message}</div>
           ))}
@@ -1350,7 +1326,7 @@ function renderValueControl(
   if (fieldType === "enum" && !["between", "inArray"].includes(operator)) {
     return (
       <select
-        className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+        className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -1366,7 +1342,7 @@ function renderValueControl(
   if (fieldType === "boolean") {
     return (
       <select
-        className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+        className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -1383,7 +1359,7 @@ function renderValueControl(
   ) {
     return (
       <input
-        className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+        className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1398,7 +1374,7 @@ function renderValueControl(
   ) {
     return (
       <input
-        className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+        className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
         type="number"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1408,7 +1384,7 @@ function renderValueControl(
 
   return (
     <input
-      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+      className="rounded-md bg-slate-950/70 px-4 py-3 text-white outline-none"
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={
