@@ -1,5 +1,5 @@
-import QueryBuilderApp from "../components/query-builder-app";
+import QueryBuilderShell from "../components/query-builder-shell";
 
 export default function Home() {
-  return <QueryBuilderApp />;
+  return <QueryBuilderShell />;
 }

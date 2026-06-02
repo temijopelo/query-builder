@@ -41,6 +41,13 @@ export interface RuleNode {
   value: string;
 }
 
+export interface PanelShellProps {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+}
+
 export interface GroupNode {
   kind: "group";
   id: string;
@@ -868,7 +875,7 @@ function renderGroupMongo(
     return clauses[0];
   }
 
-  return { [group.logic]: clauses };
+  return { [`$${group.logic}`]: clauses };
 }
 
 function renderGroupGraphql(
